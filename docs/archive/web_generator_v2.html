@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文字转语音</title>
+    <style>
+        /* --- 样式部分保持不变 --- */
+        body { font-family: sans-serif; margin: 2em; background-color: white}
+        #voice-selector { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        .voice-box { border: 2px solid #ccc; border-radius: 8px; padding: 10px; cursor: pointer; text-align: center; transition: all 0.2s ease-in-out; }
+        .voice-box.selected { border-color: #007bff; background-color: #e7f3ff; transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .voice-box p { margin: 0; font-weight: bold; }
+        .voice-box audio { display: block; margin-top: 10px; max-width: 150px; }
+        #main-container { display: flex; gap: 30px; margin-top: 20px; }
+        #left-panel, #right-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        button { padding: 12px 20px; cursor: pointer; border: none; border-radius: 4px; background-color: #007bff; color: white; font-size: 16px; transition: background-color 0.2s; }
+        button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        #status, #char-count { font-weight: bold; color: #555; }
+        #audio-output, #srt-output { display: none; }
+        #audio-player { width: 100%; }
+        #text-input { height: 45vh; }
+        #right-panel h3 { margin-bottom: 0; }
+        .output-controls { display: flex; gap: 10px; align-items: center; }
+        #srt-display {height: 40vh}
+        #download-audio-btn {display: none}
+        #copy-srt-btn {display: none}
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div>可以在这里先生成，再到剪映里面换音色。注意处理：网址，长英文，缩写替换 / 释义，符号，表情包，敏感信息，错字语病等等。</div>
+        <h3>1. 选择一个音色</h3>
+        <div id="voice-selector">
+            <div class="voice-box" data-voice="zh-CN-YunyangNeural">
+                <p>云扬 (男 播音)</p>
+                <audio src="/static/voices/zh-CN-YunyangNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-YunjianNeural">
+                <p>云健 (男 稳重)</p>
+                <audio src="/static/voices/zh-CN-YunjianNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-XiaoxiaoNeural">
+                <p>晓晓 (女 甜美)</p>
+                <audio src="/static/voices/zh-CN-XiaoxiaoNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-XiaoyiNeural">
+                <p>晓依 (女 少女)</p>
+                <audio src="/static/voices/zh-CN-XiaoyiNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-YunxiNeural">
+                <p>云希 (男 电影小帅)</p>
+                <audio src="/static/voices/zh-CN-YunxiNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-YunxiaNeural">
+                <p>云霞 (女 女童)</p>
+                <audio src="/static/voices/zh-CN-YunxiaNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-liaoning-XiaobeiNeural">
+                <p>小北 (女 东北)</p>
+                <audio src="/static/voices/zh-CN-liaoning-XiaobeiNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-CN-shaanxi-XiaoniNeural">
+                <p>小妮 (女 陕西)</p>
+                <audio src="/static/voices/zh-CN-shaanxi-XiaoniNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-HK-HiuGaaiNeural">
+                <p>晓佳 (女 粤语)</p>
+                <audio src="/static/voices/zh-HK-HiuGaaiNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-HK-HiuMaanNeural">
+                <p>晓曼 (女 粤语)</p>
+                <audio src="/static/voices/zh-HK-HiuMaanNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-HK-WanLungNeural">
+                <p>云龙 (男 粤语)</p>
+                <audio src="/static/voices/zh-HK-WanLungNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-TW-HsiaoChenNeural">
+                <p>晓臻 (女 台湾)</p>
+                <audio src="/static/voices/zh-TW-HsiaoChenNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-TW-HsiaoYuNeural">
+                <p>晓雨 (女 台湾 慢)</p>
+                <audio src="/static/voices/zh-TW-HsiaoYuNeural.mp3" preload="none" controls></audio>
+            </div>
+            <div class="voice-box" data-voice="zh-TW-YunJheNeural">
+                <p>云哲 (男 台湾)</p>
+                <audio src="/static/voices/zh-TW-YunJheNeural.mp3" preload="none" controls></audio>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <div id="main-container">
+        <div id="left-panel">
+            <h3>2. 输入文字</h3>
+            <textarea id="text-input" placeholder="在这里输入文字..."></textarea>
+            <p id="char-count">字数: 0</p>
+            <button id="generate-btn">生成音频和字幕</button>
+            <p id="status"></p>
+        </div>
+        <div id="right-panel">
+            <div>
+                <h3 style="display: inline">3. 结果输出</h3>&nbsp;&nbsp;<button id="download-audio-btn">下载 MP3 文件</button>&nbsp;&nbsp;<button id="copy-srt-btn">复制 SRT 内容</button>
+            </div>
+            <div id="audio-output">
+                <audio id="audio-player" controls></audio>
+            </div>
+            <div id="srt-output">
+                <textarea id="srt-display" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- API 配置 ---
+        const API_URL = "http://127.0.0.1:36485/tts";
+        const API_TOKEN = "your_secure_api_token_here";
+
+        // --- 页面元素获取 (保持不变) ---
+        const voiceSelector = document.getElementById('voice-selector');
+        const textInput = document.getElementById('text-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const statusEl = document.getElementById('status');
+        const charCountEl = document.getElementById('char-count');
+        
+        const audioOutput = document.getElementById('audio-output');
+        const audioPlayer = document.getElementById('audio-player');
+        const downloadAudioBtn = document.getElementById('download-audio-btn');
+
+        const srtOutput = document.getElementById('srt-output');
+        const srtDisplay = document.getElementById('srt-display');
+        const copySrtBtn = document.getElementById('copy-srt-btn');
+        
+        let selectedVoice = null;
+
+        // --- 初始化函数 (保持不变) ---
+        function initialize() {
+            const firstVoiceBox = voiceSelector.querySelector('.voice-box');
+            if (firstVoiceBox) {
+                firstVoiceBox.classList.add('selected');
+                selectedVoice = firstVoiceBox.getAttribute('data-voice');
+            }
+            
+            textInput.addEventListener('input', () => {
+                const count = textInput.value.length;
+                charCountEl.textContent = `字数: ${count}`;
+            });
+
+            const allSampleAudios = voiceSelector.querySelectorAll('audio');
+            allSampleAudios.forEach(audio => {
+                audio.addEventListener('play', (event) => {
+                    allSampleAudios.forEach(otherAudio => {
+                        if (otherAudio !== event.target) {
+                            otherAudio.pause();
+                        }
+                    });
+                });
+            });
+        }
+
+        // --- 功能 1: 音色选择 (保持不变) ---
+        voiceSelector.addEventListener('click', (event) => {
+            const voiceBox = event.target.closest('.voice-box');
+            if (!voiceBox) return;
+
+            document.querySelectorAll('.voice-box').forEach(box => {
+                box.classList.remove('selected');
+            });
+
+            voiceBox.classList.add('selected');
+            selectedVoice = voiceBox.getAttribute('data-voice');
+            console.log("已选择音色:", selectedVoice);
+        });
+
+        // --- 功能 2: 生成音频和字幕 (保持不变) ---
+        generateBtn.addEventListener('click', async () => {
+            const text = textInput.value.trim();
+            if (!selectedVoice) { alert("请先选择一个音色！"); return; }
+            if (!text) { alert("请输入需要转换的文字！"); return; }
+
+            statusEl.textContent = "生成中，请耐心等待...";
+            audioOutput.style.display = 'none';
+            srtOutput.style.display = 'none';
+            generateBtn.disabled = true;
+
+            try {
+                const requestBody = { text: text, voice: selectedVoice };
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-API-Token': API_TOKEN },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => null);
+                    const detail = errorData ? JSON.stringify(errorData.detail) : `${response.status} ${response.statusText}`;
+                    throw new Error(`服务器响应错误: ${detail}`);
+                }
+
+                const data = await response.json();
+                
+                audioPlayer.src = data.media_url;
+                audioOutput.style.display = 'block';
+                downloadAudioBtn.style.display = "inline";
+
+                srtDisplay.value = data.subtitles_content;
+                srtOutput.style.display = 'block';
+                copySrtBtn.style.display = "inline";
+
+                statusEl.textContent = "生成成功！";
+            } catch (error) {
+                console.error("请求失败:", error);
+                statusEl.textContent = `发生错误: ${error.message}`;
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+        
+        // ==================== 新增的健壮的复制函数 ====================
+        function copyTextToClipboard(text) {
+            // 优先使用 navigator.clipboard (安全上下文)
+            if (navigator.clipboard && window.isSecureContext) {
+                return navigator.clipboard.writeText(text);
+            } else {
+                // 回退到 document.execCommand (兼容不安全上下文)
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                
+                // 将输入框隐藏
+                textArea.style.position = "absolute";
+                textArea.style.left = "-9999px";
+                
+                document.body.prepend(textArea);
+                textArea.select();
+
+                try {
+                    document.execCommand('copy');
+                } catch (err) {
+                    console.error('Fallback: 复制失败', err);
+                    return Promise.reject(err);
+                } finally {
+                    textArea.remove();
+                }
+                return Promise.resolve();
+            }
+        }
+
+        // --- 功能 3: SRT 字幕复制 (使用新的复制函数) ---
+        copySrtBtn.addEventListener('click', () => {
+            if (srtDisplay.value) {
+                copyTextToClipboard(srtDisplay.value).then(() => {
+                    copySrtBtn.textContent = "已复制";
+                    setTimeout(()=>{
+                        copySrtBtn.textContent = "复制 SRT 内容";
+                    }, 1888)
+
+                }).catch(err => {
+                    console.error('复制失败: ', err);
+                    alert('复制失败，请检查浏览器权限或手动复制。');
+                });
+            }
+        });
+
+        // --- 功能 4: 音频下载 (保持不变) ---
+        downloadAudioBtn.addEventListener('click', () => {
+            const audioUrl = audioPlayer.src;
+            if (!audioUrl) { alert('没有可下载的音频文件。'); return; }
+            
+            const filename = audioUrl.split('/').pop();
+            const a = document.createElement('a');
+            a.href = audioUrl;
+            a.download = filename || 'audio.mp3';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+
+        // --- 页面加载后立即执行初始化 ---
+        initialize();
+        
+    </script>
+
+</body>
+</html>
+

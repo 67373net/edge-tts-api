@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件列表</title>
+    <style>
+        /* 恢复为了让移动设备上看起来更好的样式 */
+        body {
+            font-family: sans-serif;
+            margin: 1em;
+            background-color: white;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            margin-bottom: 0.5em;
+            padding: 0.5em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: flex; /* 使用 Flexbox 布局以对齐项目 */
+            align-items: center; /* 垂直居中对齐 */
+            flex-wrap: wrap; /* 在小屏幕上允许换行 */
+        }
+        a {
+            color: #0066cc;
+            margin: 0 1em; /* 在时间、链接和播放器之间添加一些间距 */
+        }
+        audio {
+            height: 30px; /* 为播放器设置一个统一的高度 */
+        }
+    </style>
+</head>
+<body>
+
+    <h3>最近生成的文件（保留28天）</h3>
+    <p>正在加载...</p>
+    <ul id="file-list"></ul>
+
+    <script>
+        // API的URL和Token
+        const apiUrl = 'http://127.0.0.1:36485/list-files';
+        const apiToken = 'your_secure_api_token_here';
+        
+        const fileListElement = document.getElementById('file-list');
+        const loadingMessage = document.querySelector('p');
+
+        // 用于跟踪当前播放的音频
+        let currentlyPlayingAudio = null;
+
+        fetch(apiUrl, {
+            headers: {
+                'X-API-Token': apiToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('网络响应失败，状态码: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            loadingMessage.style.display = 'none';
+
+            data.sort((a, b) => new Date(b.modified_at) - new Date(a.modified_at));
+
+            data.forEach(file => {
+                const listItem = document.createElement('li');
+
+                const utcDate = new Date(file.modified_at);
+                const beijingTime = utcDate.toLocaleString('zh-CN', {
+                    timeZone: 'Asia/Shanghai',
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    hour12: false
+                });
+
+                const link = document.createElement('a');
+                link.href = file.url;
+                link.textContent = file.filename;
+                link.target = '_blank';
+
+                // 按顺序添加 时间、链接
+                listItem.appendChild(document.createTextNode(beijingTime));
+                listItem.appendChild(link);
+
+                if (file.filename.toLowerCase().endsWith('.mp3')) {
+                    const audioPlayer = document.createElement('audio');
+                    audioPlayer.src = file.url;
+                    audioPlayer.controls = true;
+                    audioPlayer.preload = 'none';
+
+                    // 添加播放事件监听器以实现独占播放
+                    audioPlayer.addEventListener('play', () => {
+                        if (currentlyPlayingAudio && currentlyPlayingAudio !== audioPlayer) {
+                            currentlyPlayingAudio.pause();
+                        }
+                        currentlyPlayingAudio = audioPlayer;
+                    });
+                    
+                    listItem.appendChild(audioPlayer);
+                }
+
+                fileListElement.appendChild(listItem);
+            });
+        })
+        .catch(error => {
+            console.error('获取文件列表时出错:', error);
+            loadingMessage.textContent = '加载文件列表失败。请检查网络连接或API服务是否正常。';
+            loadingMessage.style.color = 'red';
+        });
+    </script>
+
+</body>
+</html>
+

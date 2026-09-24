@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge-TTS 智能语音合成工作台</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: #eff6ff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --bg-page: #f8fafc;
+            --bg-card: #ffffff;
+            --border-color: #e2e8f0;
+            --success: #10b981;
+            --danger: #ef4444;
+            --radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 16px 20px;
+        }
+
+        /* 页面整体无最大宽度限制 */
+        .container {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* 顶部标题栏 */
+        header {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-title h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* 卡片通用 */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            padding: 16px 18px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-header {
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* SVG 图标通用样式 */
+        .svg-icon {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+
+        .svg-icon-sm {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 1. 音色选择网格 */
+        .voice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 10px;
+        }
+
+        .voice-card {
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            cursor: pointer;
+            background: #ffffff;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .voice-card:hover {
+            border-color: #93c5fd;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .voice-card.selected {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            box-shadow: 0 0 0 1px var(--primary);
+        }
+
+        .voice-card-header {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .voice-card .name {
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+        }
+
+        .voice-card .desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .voice-card audio {
+            width: 100%;
+            height: 28px;
+        }
+
+        /* 2. TTS 操作区：左右分栏 */
+        .generator-main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        @media (max-width: 960px) {
+            .generator-main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .input-panel, .output-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* 增高文本输入框与SRT字幕框 */
+        textarea#text-input {
+            width: 100%;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 340px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea#text-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .input-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* 参数折叠 */
+        details.advanced-params {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            background: #fafafa;
+        }
+
+        details.advanced-params summary {
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .param-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .param-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .param-item label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .param-item input {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 0.85rem;
+            background: #fff;
+        }
+
+        /* 按钮与状态 */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 15px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background-color: #f1f5f9;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background-color: #e2e8f0;
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status-box {
+            font-size: 0.85rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status-box.active {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-loading {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+
+        .status-success {
+            background: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .status-error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        /* 输出结果区域 */
+        .output-panel {
+            background: #fafbfc;
+            border: 1px dashed var(--border-color);
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .output-audio-box {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .output-audio-box audio {
+            width: 100%;
+        }
+
+        .tabs-header {
+            display: flex;
+            gap: 6px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        .tab-content textarea {
+            min-height: 290px;
+            font-size: 0.85rem;
+            font-family: monospace;
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            resize: vertical;
+        }
+
+        /* 3. 底部复合区域：标签页切换（生成历史 vs API代码） */
+        .bottom-tabs-nav {
+            display: flex;
+            gap: 4px;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 12px;
+        }
+
+        .bottom-nav-btn {
+            background: transparent;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease-in-out;
+        }
+
+        .bottom-nav-btn:hover {
+            color: var(--text-main);
+        }
+
+        .bottom-nav-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .bottom-tab-pane {
+            display: none;
+        }
+
+        .bottom-tab-pane.active {
+            display: block;
+        }
+
+        /* 生成历史顶部控件布局：标题 + 搜索框在左侧，8天说明在最右侧 */
+        .history-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .history-search-input {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            outline: none;
+            width: 240px;
+            transition: border-color 0.2s;
+        }
+
+        .history-search-input:focus {
+            border-color: var(--primary);
+        }
+
+        .history-notice-right {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        /* 历史表格样式：表头与表格宽度拉满 100%，前4列紧凑(~2中文字宽)，最右侧“操作”列吸纳剩余全部宽度并在其右侧用空白自然填充 */
+        .history-table-wrapper {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: #fff;
+        }
+
+        table.history-table {
+            width: 100%;                  /* 表头与表格宽度拉满整行 */
+            border-collapse: collapse;
+            font-size: 0.88rem;
+            background: #fff;
+            table-layout: auto;
+        }
+
+        table.history-table th, table.history-table td {
+            padding: 8px 18px;            /* 单元格左右内边距，相邻列间距约 2 个中文字宽 */
+            text-align: left;             /* 全部表头和内容统一左对齐 */
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        table.history-table th {
+            background: #f8fafc;
+            color: var(--text-muted);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* 紧凑固定前4列宽度，最右边的“操作”列吸纳剩余全部宽度并在其右侧用空白自然填充 */
+        table.history-table th:nth-child(1), table.history-table td:nth-child(1) { width: 1%; white-space: nowrap; }
+        table.history-table th:nth-child(2), table.history-table td:nth-child(2) { width: 1%; white-space: nowrap; }
+        table.history-table th:nth-child(3), table.history-table td:nth-child(3) { width: 1%; }
+        table.history-table th:nth-child(4), table.history-table td:nth-child(4) { width: 1%; white-space: nowrap; }
+        table.history-table th:nth-child(5), table.history-table td:nth-child(5) { width: auto; }
+
+        table.history-table tr:hover {
+            background: #f8fafc;
+        }
+
+        .file-name-cell {
+            max-width: 380px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-name-cell a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .file-name-cell a:hover {
+            text-decoration: underline;
+        }
+
+        .file-size-tag {
+            color: var(--text-muted);
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+
+        table.history-table audio {
+            height: 28px;
+            width: 220px;
+        }
+
+        .file-type-pill {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .pill-mp3 {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .pill-srt {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* 操作按钮组：统一左对齐且绝对不换行 */
+        .actions-cell {
+            display: flex;
+            gap: 6px;
+            white-space: nowrap;
+            justify-content: flex-start;  /* 操作列左对齐 */
+            flex-shrink: 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+
+        /* 4. API 代码 Demo 卡片 */
+        .api-demo-card {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 14px 18px;
+        }
+
+        .api-demo-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .api-demo-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .code-block {
+            background: #0f172a;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.83rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            color: #f8fafc;
+            border: 1px solid #334155;
+        }
+
+        .token-masked {
+            color: #f59e0b;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .spin {
+            animation: rotate 1s linear infinite;
+        }
+
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 顶部标题栏 -->
+        <header>
+            <div class="header-title">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                <h1>Edge-TTS 智能语音合成工作台</h1>
+            </div>
+        </header>
+
+        <!-- 1. 音色选择区 -->
+        <section class="card">
+            <div class="card-header">
+                <h2>
+                    <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M10 8v8l6-4-6-4z"/></svg>
+                    音色
+                </h2>
+            </div>
+            <div class="voice-grid" id="voice-grid">
+                <!-- 由 JS 动态渲染音色列表，本地音频播放，默认选中云扬 -->
+            </div>
+        </section>
+
+        <!-- 2. TTS 核心操作区（左右分栏） -->
+        <section class="card">
+            <div class="card-header">
+                <h2 style="display: flex; align-items: center; gap: 8px;">
+                    <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="23"/><line x1="8" x2="16" y1="23" y2="23"/></svg>
+                    TTS
+                </h2>
+            </div>
+
+            <div class="generator-main">
+                <!-- 左侧：文稿输入与参数配置 -->
+                <div class="input-panel">
+                    <div class="input-wrapper">
+                        <textarea id="text-input" placeholder="请在此粘贴或输入需要转换朗读的文稿内容..."></textarea>
+                        <div class="input-footer">
+                            <span id="char-count">字符数: 0</span>
+                            <button class="btn btn-secondary btn-sm" id="clear-text-btn">清空文稿</button>
+                        </div>
+                    </div>
+
+                    <!-- 高级参数微调折叠面板 -->
+                    <details class="advanced-params">
+                        <summary>
+                            <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
+                            高级参数调节 (语速 / 音量 / 音调 / 代理 / 自定义文件名)
+                        </summary>
+                        <div class="param-row">
+                            <div class="param-item">
+                                <label for="rate-input">语速 (Rate):</label>
+                                <input type="text" id="rate-input" value="+0%" placeholder="+0%">
+                            </div>
+                            <div class="param-item">
+                                <label for="volume-input">音量 (Volume):</label>
+                                <input type="text" id="volume-input" value="+0%" placeholder="+0%">
+                            </div>
+                            <div class="param-item">
+                                <label for="pitch-input">音调 (Pitch):</label>
+                                <input type="text" id="pitch-input" value="+0Hz" placeholder="+0Hz">
+                            </div>
+                        </div>
+                        <div class="param-row">
+                            <div class="param-item">
+                                <label for="filename-input">自定义文件名 (可选):</label>
+                                <input type="text" id="filename-input" placeholder="留空则自动取文字前18字">
+                            </div>
+                            <div class="param-item">
+                                <label for="proxy-input">代理地址 (可选):</label>
+                                <input type="text" id="proxy-input" placeholder="http://127.0.0.1:7890">
+                            </div>
+                        </div>
+                    </details>
+
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 4px;">
+                        <button class="btn btn-primary" id="generate-btn" style="flex: 1;">
+                            <svg id="generate-btn-icon" class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            <span id="generate-btn-text">使用「云扬」音色朗读</span>
+                        </button>
+                    </div>
+
+                    <div id="status-box" class="status-box"></div>
+                </div>
+
+                <!-- 右侧：生成结果展示 -->
+                <div class="output-panel">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="font-size: 0.95rem; font-weight: 700;">生成结果</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <a id="download-audio-btn" class="btn btn-secondary btn-sm" style="display: none;" download>
+                                <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                                下载 MP3
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="output-audio-box" class="output-audio-box" style="display: none;">
+                        <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">音频试听:</span>
+                        <audio id="result-audio-player" controls preload="none"></audio>
+                    </div>
+
+                    <div id="output-tabs-box" style="display: none; flex-direction: column; gap: 8px;">
+                        <div class="tabs-header">
+                            <button class="tab-btn active" data-tab="srt">SRT 字幕内容</button>
+                            <button class="tab-btn" data-tab="processed">时间戳标记原文</button>
+                        </div>
+
+                        <div id="tab-srt" class="tab-content active">
+                            <textarea id="result-srt-text" readonly placeholder="SRT 字幕文本将在此显示..."></textarea>
+                            <button class="btn btn-secondary btn-sm" id="copy-srt-btn">
+                                <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                                复制 SRT 字幕
+                            </button>
+                        </div>
+
+                        <div id="tab-processed" class="tab-content">
+                            <textarea id="result-processed-text" readonly placeholder="带有 [time=xx:xx:xx,xxx] 时间戳的原文稿将在此显示..."></textarea>
+                            <button class="btn btn-secondary btn-sm" id="copy-processed-btn">
+                                <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                                复制时间戳文稿
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="output-empty-placeholder" class="empty-state">
+                        点击左侧生成按钮后，此处将呈现合成的音频与同步字幕。
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 底部区域：标签页切换（生成历史 vs API代码，默认显示生成历史） -->
+        <section class="card">
+            <nav class="bottom-tabs-nav">
+                <button class="bottom-nav-btn active" data-pane="pane-history">
+                    <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    生成历史
+                </button>
+                <button class="bottom-nav-btn" data-pane="pane-api-demo">
+                    <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    API 代码
+                </button>
+            </nav>
+
+            <!-- 标签页 1：生成历史列表（默认显示） -->
+            <div id="pane-history" class="bottom-tab-pane active">
+                <div class="history-header-row">
+                    <input type="text" id="history-search-input" class="history-search-input" placeholder="按文件名筛选历史...">
+                    <div class="history-notice-right">
+                        文件在服务端保留 8 天，到期自动清理
+                    </div>
+                </div>
+
+                <div class="history-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>生成时间 (北京时间)</th>
+                                <th>类型</th>
+                                <th>文件名</th>
+                                <th>音频播放</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <tr>
+                                <td colspan="5" class="empty-state">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 标签页 2：API 代码 Demo -->
+            <div id="pane-api-demo" class="bottom-tab-pane">
+                <div class="api-demo-card">
+                    <div class="api-demo-header">
+                        <div class="api-demo-title">
+                            <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            API 调用代码示例 (cURL)
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="copy-api-code-btn" style="background: #334155; color: #f8fafc; border: none;">
+                            <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                            <span id="copy-api-btn-text">复制调用命令</span>
+                        </button>
+                    </div>
+                    <pre class="code-block" id="api-code-display"><code>curl -X POST "http://127.0.0.1:36485/tts" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Token: <span class="token-masked">••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••</span>" \
+  -d '{
+      "text": "你好，这是经过高健壮性优化的 Edge-TTS 语音服务。",
+      "voice": "zh-CN-YunyangNeural"
+  }'</code></pre>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- 预置声音列表（全部切换为本地静态资源路径） ---
+        const PRESET_VOICES = [
+            { id: "zh-CN-YunjianNeural", name: "云健", tag: "男 稳重", audio: "/static/voices/zh-CN-YunjianNeural.mp3" },
+            { id: "zh-CN-YunyangNeural", name: "云扬", tag: "男 播音", audio: "/static/voices/zh-CN-YunyangNeural.mp3" },
+            { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", tag: "女 甜美", audio: "/static/voices/zh-CN-XiaoxiaoNeural.mp3" },
+            { id: "zh-CN-XiaoyiNeural", name: "晓依", tag: "女 少女", audio: "/static/voices/zh-CN-XiaoyiNeural.mp3" },
+            { id: "zh-CN-YunxiNeural", name: "云希", tag: "男 电影解说", audio: "/static/voices/zh-CN-YunxiNeural.mp3" },
+            { id: "zh-CN-YunxiaNeural", name: "云霞", tag: "女 女童", audio: "/static/voices/zh-CN-YunxiaNeural.mp3" },
+            { id: "zh-CN-liaoning-XiaobeiNeural", name: "小北", tag: "女 东北方言", audio: "/static/voices/zh-CN-liaoning-XiaobeiNeural.mp3" },
+            { id: "zh-CN-shaanxi-XiaoniNeural", name: "小妮", tag: "女 陕西方言", audio: "/static/voices/zh-CN-shaanxi-XiaoniNeural.mp3" },
+            { id: "zh-HK-HiuGaaiNeural", name: "晓佳", tag: "女 粤语", audio: "/static/voices/zh-HK-HiuGaaiNeural.mp3" },
+            { id: "zh-HK-HiuMaanNeural", name: "晓曼", tag: "女 粤语", audio: "/static/voices/zh-HK-HiuMaanNeural.mp3" },
+            { id: "zh-HK-WanLungNeural", name: "云龙", tag: "男 粤语", audio: "/static/voices/zh-HK-WanLungNeural.mp3" },
+            { id: "zh-TW-HsiaoChenNeural", name: "晓臻", tag: "女 台湾国语", audio: "/static/voices/zh-TW-HsiaoChenNeural.mp3" },
+            { id: "zh-TW-HsiaoYuNeural", name: "晓雨", tag: "女 台湾温柔", audio: "/static/voices/zh-TW-HsiaoYuNeural.mp3" },
+            { id: "zh-TW-YunJheNeural", name: "云哲", tag: "男 台湾国语", audio: "/static/voices/zh-TW-YunJheNeural.mp3" }
+        ];
+
+        // 默认音色：云扬
+        let selectedVoice = "zh-CN-YunyangNeural";
+        let activeAudioElement = null; // 全局独占播放
+        let historyFiles = [];
+        let lastHistoryFingerprint = "";
+
+        // 由服务端动态注入环境变量配置的 API Token
+        const SERVER_ENV_TOKEN = "__ENV_API_TOKEN__";
+        function getApiToken() {
+            return SERVER_ENV_TOKEN;
+        }
+
+        // DOM 元素
+        const voiceGrid = document.getElementById('voice-grid');
+        const textInput = document.getElementById('text-input');
+        const charCount = document.getElementById('char-count');
+        const clearTextBtn = document.getElementById('clear-text-btn');
+        const rateInput = document.getElementById('rate-input');
+        const volumeInput = document.getElementById('volume-input');
+        const pitchInput = document.getElementById('pitch-input');
+        const filenameInput = document.getElementById('filename-input');
+        const proxyInput = document.getElementById('proxy-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const generateBtnText = document.getElementById('generate-btn-text');
+        const generateBtnIcon = document.getElementById('generate-btn-icon');
+        const statusBox = document.getElementById('status-box');
+
+        // 输出区元素
+        const outputEmptyPlaceholder = document.getElementById('output-empty-placeholder');
+        const outputAudioBox = document.getElementById('output-audio-box');
+        const resultAudioPlayer = document.getElementById('result-audio-player');
+        const downloadAudioBtn = document.getElementById('download-audio-btn');
+        const outputTabsBox = document.getElementById('output-tabs-box');
+        const resultSrtText = document.getElementById('result-srt-text');
+        const resultProcessedText = document.getElementById('result-processed-text');
+        const copySrtBtn = document.getElementById('copy-srt-btn');
+        const copyProcessedBtn = document.getElementById('copy-processed-btn');
+
+        // 历史区元素
+        const historyTableBody = document.getElementById('history-table-body');
+        const historySearchInput = document.getElementById('history-search-input');
+        const copyApiCodeBtn = document.getElementById('copy-api-code-btn');
+        const copyApiBtnText = document.getElementById('copy-api-btn-text');
+
+        // 音频全局独占播放
+        function registerExclusiveAudio(audioEl) {
+            audioEl.addEventListener('play', () => {
+                if (activeAudioElement && activeAudioElement !== audioEl) {
+                    activeAudioElement.pause();
+                }
+                activeAudioElement = audioEl;
+            });
+        }
+
+        // 获取音色中文名称
+        function getVoiceName(voiceId) {
+            const v = PRESET_VOICES.find(item => item.id === voiceId);
+            return v ? v.name : "云扬";
+        }
+
+        // 动态更新朗读按钮文本（如“使用「云扬」音色朗读”）
+        function updateGenerateBtnText(loading = false) {
+            if (loading) {
+                generateBtnText.textContent = "正在生成音频与字幕...";
+            } else {
+                generateBtnText.textContent = `使用「${getVoiceName(selectedVoice)}」音色朗读`;
+            }
+        }
+
+        // 渲染声音角色卡片（默认选中云扬，名称与标签同一行）
+        function renderVoiceSelector() {
+            voiceGrid.innerHTML = '';
+            PRESET_VOICES.forEach((voice) => {
+                const card = document.createElement('div');
+                card.className = `voice-card ${voice.id === selectedVoice ? 'selected' : ''}`;
+                card.setAttribute('data-id', voice.id);
+
+                card.innerHTML = `
+                    <div class="voice-card-header">
+                        <span class="name">${voice.name}</span>
+                        <span class="desc">${voice.tag}</span>
+                    </div>
+                    <audio src="${voice.audio}" preload="none" controls></audio>
+                `;
+
+                const audioEl = card.querySelector('audio');
+                registerExclusiveAudio(audioEl);
+
+                card.addEventListener('click', (e) => {
+                    if (e.target.tagName.toLowerCase() === 'audio') return;
+                    document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                    selectedVoice = voice.id;
+                    updateGenerateBtnText(false);
+                });
+
+                voiceGrid.appendChild(card);
+            });
+        }
+
+        // 通用剪贴板复制工具
+        function copyText(text, btnElement, successMsg = "已复制！") {
+            const originalHTML = btnElement.innerHTML;
+            const doFeedback = () => {
+                btnElement.textContent = successMsg;
+                setTimeout(() => { btnElement.innerHTML = originalHTML; }, 1800);
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(doFeedback).catch(() => fallbackCopy(text, doFeedback));
+            } else {
+                fallbackCopy(text, doFeedback);
+            }
+        }
+
+        function fallbackCopy(text, callback) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                callback();
+            } catch (err) {
+                alert('复制失败，请手动选择复制。');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // 提示状态显示
+        function setStatus(msg, type = "info") {
+            statusBox.className = `status-box active status-${type}`;
+            statusBox.innerHTML = `
+                <svg class="svg-icon svg-icon-sm" viewBox="0 0 24 24">
+                    ${type === 'success' ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>' :
+                      type === 'error' ? '<circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>' :
+                      '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>'}
+                </svg>
+                <span>${msg}</span>
+            `;
+        }
+
+        // 播放生成成功“叮~”的清脆提示音（使用原生 Web Audio API，零网络依赖、毫秒级响应、极低资源开销）
+        function playDingSound() {
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) return;
+                const audioCtx = new AudioContextClass();
+                const now = audioCtx.currentTime;
+
+                // 主音调 (高音清脆 C6: 1046.5Hz，微上扬至 E6: 1318.5Hz)
+                const osc1 = audioCtx.createOscillator();
+                const gain1 = audioCtx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(1046.5, now);
+                osc1.frequency.exponentialRampToValueAtTime(1318.5, now + 0.08);
+
+                gain1.gain.setValueAtTime(0.18, now);
+                gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.75);
+
+                osc1.connect(gain1);
+                gain1.connect(audioCtx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.8);
+
+                // 晶莹微泛音 (高八度 C7: 2093Hz)
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(2093, now + 0.02);
+
+                gain2.gain.setValueAtTime(0.1, now + 0.02);
+                gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+                osc2.start(now + 0.02);
+                osc2.stop(now + 0.65);
+            } catch (e) {
+                // 静音或环境不支持时静默忽略
+            }
+        }
+
+        // 生成语音调用
+        async function handleGenerate() {
+            const text = textInput.value.trim();
+            if (!text) {
+                alert("请输入需要转换的文稿内容！");
+                textInput.focus();
+                return;
+            }
+
+            const token = getApiToken();
+            const rate = rateInput.value.trim() || "+0%";
+            const volume = volumeInput.value.trim() || "+0%";
+            const pitch = pitchInput.value.trim() || "+0Hz";
+            const filename = filenameInput.value.trim() || null;
+            const proxy = proxyInput.value.trim() || null;
+
+            generateBtn.disabled = true;
+            generateBtnIcon.classList.add("spin");
+            updateGenerateBtnText(true);
+            setStatus("正在安全调用 Edge-TTS 语音合成...", "loading");
+
+            const requestBody = {
+                text: text,
+                voice: selectedVoice,
+                rate: rate,
+                volume: volume,
+                pitch: pitch,
+                proxy: proxy,
+                filename: filename
+            };
+
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) {
+                    headers['X-API-Token'] = token;
+                }
+
+                const response = await fetch('/tts', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => null);
+                    const detail = errData ? (errData.detail || JSON.stringify(errData)) : `HTTP ${response.status} ${response.statusText}`;
+                    throw new Error(detail);
+                }
+
+                const data = await response.json();
+
+                setStatus("音频与字幕生成成功并已校准时间轴", "success");
+                outputEmptyPlaceholder.style.display = 'none';
+
+                resultAudioPlayer.src = data.media_url;
+                outputAudioBox.style.display = 'flex';
+                downloadAudioBtn.href = data.media_url;
+                downloadAudioBtn.style.display = 'inline-flex';
+
+                resultSrtText.value = data.subtitles_content || "";
+                resultProcessedText.value = data.processed_text || "";
+                outputTabsBox.style.display = 'flex';
+
+                // 播放清脆的“叮”提示音，不自动播放合成的长音频
+                playDingSound();
+                
+                // 立即触发历史刷新
+                loadHistoryFiles();
+
+            } catch (err) {
+                console.error("生成失败:", err);
+                setStatus(`生成失败: ${err.message}`, "error");
+            } finally {
+                generateBtn.disabled = false;
+                generateBtnIcon.classList.remove("spin");
+                updateGenerateBtnText(false);
+            }
+        }
+
+        // 加载历史文件列表
+        async function loadHistoryFiles() {
+            const token = getApiToken();
+            const headers = {};
+            if (token) {
+                headers['X-API-Token'] = token;
+            }
+
+            try {
+                const res = await fetch('/list-files', { headers });
+                if (!res.ok) {
+                    throw new Error(`加载失败 (${res.status})`);
+                }
+                const data = await res.json();
+                historyFiles = data;
+                lastHistoryFingerprint = data.length > 0 ? `${data.length}_${data[0].filename}_${data[0].modified_at}` : "empty";
+                renderHistoryTable();
+            } catch (err) {
+                historyTableBody.innerHTML = `<tr><td colspan="5" class="empty-state" style="color: var(--danger);">加载历史文件失败: ${err.message}</td></tr>`;
+            }
+        }
+
+        // 后台智能轮询：检查是否有新文件，有新文件则自动无感刷新
+        async function checkAutoRefresh() {
+            const token = getApiToken();
+            const headers = token ? { 'X-API-Token': token } : {};
+            try {
+                const res = await fetch('/list-files', { headers });
+                if (!res.ok) return;
+                const data = await res.json();
+                const fingerprint = data.length > 0 ? `${data.length}_${data[0].filename}_${data[0].modified_at}` : "empty";
+                if (fingerprint !== lastHistoryFingerprint) {
+                    lastHistoryFingerprint = fingerprint;
+                    historyFiles = data;
+                    renderHistoryTable();
+                }
+            } catch (e) {
+                // 忽略后台轮询的网络抖动
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // 渲染历史文件表格（紧凑列距，全部左对齐，右侧留空）
+        function renderHistoryTable() {
+            const filterKeyword = historySearchInput.value.trim().toLowerCase();
+            const filtered = historyFiles.filter(item => {
+                if (!filterKeyword) return true;
+                return item.filename.toLowerCase().includes(filterKeyword);
+            });
+
+            if (filtered.length === 0) {
+                historyTableBody.innerHTML = `<tr><td colspan="5" class="empty-state">暂无符合条件的历史文件记录</td></tr>`;
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            filtered.forEach(file => {
+                const tr = document.createElement('tr');
+
+                const dateObj = new Date(file.modified_at);
+                const beijingTime = dateObj.toLocaleString('zh-CN', {
+                    timeZone: 'Asia/Shanghai',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+
+                const isMp3 = file.filename.toLowerCase().endsWith('.mp3');
+                const isSrt = file.filename.toLowerCase().endsWith('.srt');
+
+                const typePill = isMp3 ? '<span class="file-type-pill pill-mp3">MP3</span>'
+                              : isSrt ? '<span class="file-type-pill pill-srt">SRT</span>'
+                              : '<span class="file-type-pill">其他</span>';
+
+                // 音频播放：若为空直接留空，不显示横线
+                let audioTd = '';
+                if (isMp3) {
+                    audioTd = `<audio src="${file.url}" controls preload="none"></audio>`;
+                }
+
+                // 文件大小放在文件名前面
+                const sizePrefix = file.size ? `<span class="file-size-tag">[${formatBytes(file.size)}]</span>` : '';
+
+                tr.innerHTML = `
+                    <td style="color: var(--text-muted); font-family: monospace;">${beijingTime}</td>
+                    <td>${typePill}</td>
+                    <td>
+                        <div class="file-name-cell" title="${file.filename}">
+                            ${sizePrefix}<a href="${file.url}" target="_blank">${file.filename}</a>
+                        </div>
+                    </td>
+                    <td>${audioTd}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <a href="${file.url}" class="btn btn-secondary btn-sm" download="${file.filename}">下载</a>
+                            <button class="btn btn-secondary btn-sm copy-link-btn" data-url="${file.url}">复制链接</button>
+                        </div>
+                    </td>
+                `;
+
+                if (isMp3) {
+                    const audioEl = tr.querySelector('audio');
+                    if (audioEl) registerExclusiveAudio(audioEl);
+                }
+
+                const copyBtn = tr.querySelector('.copy-link-btn');
+                copyBtn.addEventListener('click', () => {
+                    copyText(file.url, copyBtn, "已复制！");
+                });
+
+                fragment.appendChild(tr);
+            });
+
+            historyTableBody.innerHTML = '';
+            historyTableBody.appendChild(fragment);
+        }
+
+        // 初始化 API 代码 Demo 复制功能（显示为星号，复制出来是真实 Token）
+        function initApiDemo() {
+            const currentHost = window.location.origin;
+            const displayEl = document.getElementById('api-code-display');
+            if (displayEl) {
+                displayEl.innerHTML = `<code>curl -X POST "${currentHost}/tts" \\\n  -H "Content-Type: application/json" \\\n  -H "X-API-Token: <span class="token-masked">••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••</span>" \\\n  -d '{\n      "text": "你好，这是经过高健壮性优化的 Edge-TTS 语音服务。",\n      "voice": "zh-CN-YunyangNeural"\n  }'</code>`;
+            }
+            copyApiCodeBtn.addEventListener('click', () => {
+                const actualToken = getApiToken();
+                const realCommand = `curl -X POST "${currentHost}/tts" \\\n  -H "Content-Type: application/json" \\\n  -H "X-API-Token: ${actualToken}" \\\n  -d '{\n      "text": "你好，这是经过高健壮性优化的 Edge-TTS 语音服务。",\n      "voice": "zh-CN-YunyangNeural"\n  }'`;
+                
+                copyText(realCommand, copyApiCodeBtn, "已复制实际命令");
+            });
+        }
+
+        // 底部多标签切换绑定（生成历史 vs API 代码，默认激活生成历史）
+        function initBottomTabs() {
+            document.querySelectorAll('.bottom-nav-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetPaneId = btn.getAttribute('data-pane');
+                    document.querySelectorAll('.bottom-nav-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.bottom-tab-pane').forEach(p => p.classList.remove('active'));
+
+                    btn.classList.add('active');
+                    const targetPane = document.getElementById(targetPaneId);
+                    if (targetPane) {
+                        targetPane.classList.add('active');
+                    }
+                });
+            });
+        }
+
+        // 初始化应用程序
+        function initApp() {
+            renderVoiceSelector();
+            updateGenerateBtnText(false);
+            initApiDemo();
+            initBottomTabs();
+
+            textInput.addEventListener('input', () => {
+                charCount.textContent = `字符数: ${textInput.value.length}`;
+            });
+
+            clearTextBtn.addEventListener('click', () => {
+                if (textInput.value && confirm("确定清空文稿内容吗？")) {
+                    textInput.value = "";
+                    charCount.textContent = "字符数: 0";
+                    textInput.focus();
+                }
+            });
+
+            generateBtn.addEventListener('click', handleGenerate);
+            registerExclusiveAudio(resultAudioPlayer);
+
+            // 结果输出区域的 Tab 切换（SRT 字幕 vs 时间戳文稿）
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetTab = btn.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                    btn.classList.add('active');
+                    document.getElementById(`tab-${targetTab}`).classList.add('active');
+                });
+            });
+
+            copySrtBtn.addEventListener('click', () => {
+                copyText(resultSrtText.value, copySrtBtn, "已复制 SRT 字幕");
+            });
+
+            copyProcessedBtn.addEventListener('click', () => {
+                copyText(resultProcessedText.value, copyProcessedBtn, "已复制时间戳文稿");
+            });
+
+            // 搜索过滤轻量防抖监听 (120ms)，快速输入流畅零卡顿
+            let searchDebounceTimer = null;
+            historySearchInput.addEventListener('input', () => {
+                if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = setTimeout(renderHistoryTable, 120);
+            });
+
+            // 初始加载历史
+            loadHistoryFiles();
+
+            // 智能后台感知轮询：前台每 4 秒轮询，后台标签页降频至 30 秒，切回前台立即刷新
+            let autoRefreshTimer = null;
+            function scheduleAutoRefresh() {
+                if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+                const interval = document.hidden ? 30000 : 4000;
+                autoRefreshTimer = setInterval(checkAutoRefresh, interval);
+            }
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    checkAutoRefresh();
+                }
+                scheduleAutoRefresh();
+            });
+            scheduleAutoRefresh();
+        }
+
+        window.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>

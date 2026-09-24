@@ -1,0 +1,31 @@
+services:
+  app:
+    container_name: python-edge-tts-api
+    # 推荐模式：本地通过 Dockerfile 自动构建自洽镜像，秒级秒启、环境自洽且免除依赖冲突
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: python-edge-tts-api:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT:-36485}:80"
+    volumes:
+      - ./app:/usr/src/app
+      - ./nasShare/:/nasShare
+    working_dir: /usr/src/app
+    environment:
+      - TZ=Asia/Shanghai
+      - API_TOKEN=${API_TOKEN:-your_secure_api_token_here}
+      - OUTPUT_DIR=/nasShare/edgeTTSoutputs
+      - FILE_LIFETIME_HOURS=192 # 保留 8 天
+      - TTS_MAX_CONCURRENCY=1   # 微软端点并发限制（推荐 1 或 2，防止并发封禁）
+      - TTS_MAX_RETRIES=3       # 失败自动重试次数
+      - TTS_TIMEOUT_SECONDS=300 # 任务基础超时（秒，长文自动弹性放宽至15分钟）
+      - TTS_INACTIVITY_TIMEOUT=60 # 流式数据静默假死超时（秒，只要数据在持续写入则不中断）
+      - TTS_COOLDOWN_SECONDS=0.5 # 每次请求后的冷却微间隔
+      # - DEFAULT_PROXY=http://127.0.0.1:7890 # 可选全局默认代理
+
+# 说明：
+# 1. 采用 Dockerfile 构建独立自洽镜像，避免将宿主机 site-packages 挂入容器导致依赖污染与跨平台崩溃；
+# 2. 源码目录 ./app 与生成文件 ./nasShare 双向挂载，修改代码即时生效，生成文件持久化在宿主机；
+# 3. 如需更新 edge-tts：docker compose up -d --build 或 docker compose exec app pip install --upgrade edge-tts
