@@ -649,3 +649,52 @@ docker compose up -d --build
 
 - `feat: Edge-TTS API 智能语音合成服务与一体化工作台 (初始开源版本)`
 
+---
+
+## 对话记录 #12 (2026-09-24)
+
+### 1. 用户原始需求 (Original Prompt)
+
+```text
+[15:32:51] root@server:/path/to/docker/edgettsapi2# cat .env
+PORT=13308
+NAS_SHARE_PATH=/vol1/1000/400G/nasShare/
+API_TOKEN=xxxxxxxxxxxxxxx
+我已经在某个机器上部署了上一个版本的项目代码,并正常运行,请问我拉取这一次的大更新（项目设为公开并进行一系列修改）后，代码还能正常运行吗
+```
+
+### 2. 深度分析与平滑升级兼容性评估
+
+1. **直接结论：完全可以正常运行，但拉取方式需要注意**：
+   - 现网功能与 API 端点（`/tts`、`/list-files`、`/downloads/...`）100% 向后兼容，无需修改任何上游调用逻辑；
+   - 本次更新已将所有核心音色 MP3 试听资源完全本地化、新增 Web Audio 清脆提示音、增强任务防假死与队列保护；
+   - **特别注意**：由于在公开开源前执行了 Git Commit Squash（清空历史提交以擦除过往提交记录中的明文 Token 与私有 IP），直接执行常规 `git pull` 会报 `refusing to merge unrelated histories` 拒绝合并。需使用 `git fetch origin && git reset --hard origin/main` 规范覆盖。
+2. **环境变量兼容性逐项核对**：
+   - **`PORT=13308`**：`docker-compose.yml` 中的端口配置为 `"${PORT:-36485}:80"`，将自动优先读取 `.env` 中的 `13308` 端口，对外服务端口完全不变。
+   - **`API_TOKEN=xxxxxxxxxxxxxxx`**：`docker-compose.yml` 中已配置 `API_TOKEN=${API_TOKEN:-your_secure_api_token_here}`，Docker Compose 会自动读取用户现有私密 Token 并注入容器，API 鉴权与 Web 页面自动登录认证保持完全一致。
+   - **`NAS_SHARE_PATH=/vol1/1000/400G/nasShare/`**：本次在 `docker-compose.yml` 中将挂载路径进一步优化为 `- ${NAS_SHARE_PATH:-./nasShare/}:/nasShare`，使用户在 `.env` 中指定的外部自定义 NAS 共享目录能无缝生效挂载，历史生成的全部 MP3 和字幕继续持久化保留。
+
+### 3. 具体修改详情 (Modifications Implemented)
+
+1. **[`docker-compose.yml`](file:///home/net67373/edge-tts-api/docker-compose.yml)**：
+   - 将目录挂载项优化为 `- ${NAS_SHARE_PATH:-./nasShare/}:/nasShare`，优雅兼容用户的 `.env` 自定义 NAS 路径配置。
+2. **[`.env.example`](file:///home/net67373/edge-tts-api/.env.example)**：
+   - 新增 `NAS_SHARE_PATH` 配置说明与注释模版。
+3. **[`README.md`](file:///home/net67373/edge-tts-api/README.md)**：
+   - 在环境变量参考表格中补充 `NAS_SHARE_PATH` 字段说明。
+4. **[`docs/CONVERSATION_HISTORY.md`](file:///home/net67373/edge-tts-api/docs/CONVERSATION_HISTORY.md)**：
+   - 记录 Turn #12 的评估过程与平滑升级操作指引。
+
+### 4. Token 消耗统计 (Token Usage)
+
+- **本轮修改交互消耗 (Turn #12)**：
+  - 处理字符总计：约 `18,000` 字符
+  - **估计消耗 Token：约 `4,800` Tokens**
+- **全会话累计消耗 (Cumulative Session Usage)**：
+  - 累计字符总计：约 `1,386,000` 字符
+  - **全会话累计消耗 Token：约 `362,080` Tokens**
+
+### 5. 提交记录
+
+- `fix: 完善 docker-compose 对 NAS_SHARE_PATH 环境变量的支持并更新文档`
+

@@ -207,6 +207,7 @@ curl -X POST "http://localhost:36485/tts" \
 | :--- | :--- | :--- |
 | `PORT` | `36485` | 映射到主机的服务端口 |
 | `API_TOKEN` | 可选 | API 访问密钥。设置后所有调用需提供 `X-API-Token` |
+| `NAS_SHARE_PATH` | `./nasShare/` | 宿主机 NAS 共享持久化路径（挂载至容器 `/nasShare`） |
 | `OUTPUT_DIR` | `/nasShare/edgeTTSoutputs` | 音频和字幕文件的输出目录（不可写时自动降级到本地目录） |
 | `FILE_LIFETIME_HOURS` | `192` | 文件保留时长（小时，默认 8 天 = 192 小时），后台定时清理过期文件 |
 | `CLEANUP_INTERVAL_SECONDS`| `3600` | 后台清理任务运行周期（秒） |

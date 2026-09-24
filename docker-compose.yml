@@ -11,7 +11,7 @@ services:
       - "${PORT:-36485}:80"
     volumes:
       - ./app:/usr/src/app
-      - ./nasShare/:/nasShare
+      - ${NAS_SHARE_PATH:-./nasShare/}:/nasShare
     working_dir: /usr/src/app
     environment:
       - TZ=Asia/Shanghai
