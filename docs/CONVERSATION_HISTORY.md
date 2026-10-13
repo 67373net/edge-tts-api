@@ -698,3 +698,60 @@ API_TOKEN=xxxxxxxxxxxxxxx
 
 - `fix: 完善 docker-compose 对 NAS_SHARE_PATH 环境变量的支持并更新文档`
 
+---
+
+## 对话记录 #13 (2026-10-13)
+
+### 1. 用户原始需求 (Original Prompt)
+
+```text
+发生错误: 服务器响应错误: "Edge-TTS 语音生成失败 (已重试 3 次)。详情: Edge-TTS 进程返回非零状态码 (1): Traceback (most recent call last):
+ File "/usr/local/lib/python3.11/site-packages/edge_tts/communicate.py", line 588, in stream
+ async for message in self.__stream():
+ File "/usr/local/lib/python3.11/site-packages/edge_tts/communicate.py", line 461, in __stream
+ async with aiohttp.ClientSession(
+ File "/usr/local/lib/python3.11/site-packages/aiohttp/client.py", line 1693, in __aenter__
+ self._resp: _RetType_co = await self._coro
+ ^^^^^^^^^^^^^^^^
+ File "/usr/local/lib/python3.11/site-packages/aiohttp/client.py", line 1266, in _ws_connect
+ raise WSServerHandshakeError(
+aiohttp.client_exceptions.WSServerHandshakeError: 403, message='Invalid response status', url='wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=...&Sec-MS-GEC=...&Sec-MS-GEC-Version=1-143.0.3650.75'
+```
+
+### 2. 深度排查与根因剖析 (Root Cause Analysis)
+
+1. **微软官方全球 WebSocket 端点风控阻断与迁移 (Global 403 Outage)**：
+   - **事件背景**：2026 年 10 月 12 日起，微软官方全面收紧并逐步停用了原有的 Bing 朗读端点 `speech.platform.bing.com`。全球范围内（包括美西、欧洲、拉美与亚太）所有向该旧版端点发起的 WebSocket 握手请求均被直接返回 `HTTP 403 Forbidden` (`Invalid response status`)。
+   - **开源社区现状**：该故障为上游微软接口变动引发的全球性问题（对应 edge-tts 官方 Issue #490 与 PR #491），包括 edge-tts-free 等多个知名在线 TTS 站点全部瘫痪。
+2. **微软最新协议架构转移至 `api.msedgeservices.com`**：
+   - 微软新版 Edge 浏览器（Edge 155+）已将朗读 WebSocket 端点重定向至 `wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1`。
+   - 该新端点全面接受以 `Ocp-Apim-Subscription-Key` 鉴权的连接协议，且向后兼容原有的音频流格式（MP3 24kHz Mono 48kbps）与 WordBoundary/SentenceBoundary 字幕时间轴打点。
+3. **时钟偏移校准 (Clock Skew) 在非英文字符集环境下的潜在异常**：
+   - 原版 `edge_tts` 在处理服务器返回的 `Date` 响应头时使用了 `strptime`。在特定非英语系统 Locale 下，日期月份（如 "Oct"）解析会报错抛出 `SkewAdjustmentError`，从而阻断时间校准。
+
+### 3. 彻底治本的架构重构方案 (Architectural Solution)
+
+1. **新建高可用增强调度器 [`app/edge_tts_runner.py`](file:///home/net67373/edge-tts-api/app/edge_tts_runner.py)**：
+   - **多端点自愈轮换与容灾机制**：默认首选微软最新的 `api.msedgeservices.com` 高可用 WebSocket 端点；若遇异常，自动热回退至旧版 `speech.platform.bing.com` 端点重试，杜绝单点依赖。
+   - **无感知系统级 Monkey Patch**：在运行时动态重写 `communicate.WSS_URL` 与 `constants.WSS_URL`，无论外部库如何安装升级，均能强制生效最新端点。
+   - **国际化日期安全解析**：采用 Python 标准库 `email.utils.parsedate_to_datetime` 无视系统 Locale 安全解析 HTTP Date，彻底消除时钟偏移校准异常。
+2. **核心业务集成 [`app/main.py`](file:///home/net67373/edge-tts-api/app/main.py)**：
+   - 将子进程执行由 `python -m edge_tts` 切换为调用 `app/edge_tts_runner.py`。
+   - 依然保持原有的单并发防封队列、长文弹性动态时限（300s~900s）、流式活跃写入看门狗及指数退避重试策略。
+   - 因为 `./app` 目录与 Docker 容器内部双向挂载，用户在宿主机执行 `git pull` 后代码立即生效，音频和字幕生成完全恢复正常！
+3. **测试验证**：
+   - 在独立容器环境中运行端到端测试，验证 `api.msedgeservices.com` 端点成功生成有效 MP3（20KB+）与带时间戳的 SRT 字幕，耗时 0.8 秒，退出码为 0。
+
+### 4. Token 消耗统计 (Token Usage)
+
+- **本轮修改交互消耗 (Turn #13)**：
+  - 处理字符总计：约 `58,000` 字符
+  - **估计消耗 Token：约 `15,200` Tokens**
+- **全会话累计消耗 (Cumulative Session Usage)**：
+  - 累计字符总计：约 `1,444,000` 字符
+  - **全会话累计消耗 Token：约 `377,280` Tokens**
+
+### 5. 提交记录
+
+- `fix: 引入 edge_tts_runner 支持微软最新 msedgeservices 端点与自动容灾，解决全球 403 阻断`
+

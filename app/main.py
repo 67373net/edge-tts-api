@@ -529,9 +529,10 @@ async def create_tts(request: Request, tts_request: TTSRequest):
     mp3_filepath = os.path.join(OUTPUT_DIR, mp3_filename)
     srt_filepath = os.path.join(OUTPUT_DIR, srt_filename)
 
-    # 3. 组装 Edge-TTS 执行命令
+    # 3. 组装 Edge-TTS 执行命令 (通过增强调度器支持最新微软 WebSocket 端点与防 403 容灾)
+    runner_script = str(Path(__file__).resolve().parent / "edge_tts_runner.py")
     command = [
-        sys.executable, "-m", "edge_tts",
+        sys.executable, runner_script,
         "--text", tts_request.text,
         "--voice", tts_request.voice,
         "--rate", tts_request.rate,

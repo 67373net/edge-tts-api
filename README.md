@@ -227,6 +227,7 @@ curl -X POST "http://localhost:36485/tts" \
 .
 ├── app/
 │   ├── main.py              # FastAPI 核心服务 (高健壮性防封队列、字幕重校准、API端点)
+│   ├── edge_tts_runner.py   # 增强运行调度器 (最新微软 WebSocket 端点、多端点自动容灾、Locale 日期解析)
 │   ├── requirements.txt     # 核心依赖清单
 │   └── templates/
 │       └── index.html       # 现代化一体 Web 语音合成工作台

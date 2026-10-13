@@ -96,5 +96,15 @@ class TestCoreLogic(unittest.TestCase):
         long_timeout = calculate_dynamic_timeout(long_text)
         self.assertGreaterEqual(long_timeout, 600.0) # 300 + 2000*0.15 = 600s (10 min)
 
+    def test_safe_parse_rfc2616_date(self):
+        from email.utils import parsedate_to_datetime
+        from datetime import timezone
+        date_str = "Mon, 12 Oct 2026 03:16:09 GMT"
+        parsed = parsedate_to_datetime(date_str)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.year, 2026)
+        self.assertEqual(parsed.month, 10)
+        self.assertEqual(parsed.day, 12)
+
 if __name__ == '__main__':
     unittest.main()
