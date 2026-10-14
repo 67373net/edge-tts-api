@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Edge-TTS 增强运行调度器 (Multi-Endpoint Auto-Failover Runner)
+Edge-TTS 增强运行调度器 (Multi-Endpoint Auto-Failover & Sec-MS-GEC v2 Runner)
 
-解决微软自 2026 年 10 月起对 speech.platform.bing.com 原旧版 WebSocket 端点
-返回 HTTP 403 (Invalid response status) 的全球封禁/变更问题。
+解决微软自 2026 年 10 月起对 Edge 语音合成服务强制启用 Sec-MS-GEC v2 签名，
+以及替代端点 (api.msedgeservices.com) 产生 HTTP 429 (Too Many Requests) 频控的问题。
 
 特性：
-1. 优先使用微软最新合成端点 (api.msedgeservices.com)，旧版端点作为容灾回退。
-2. 修复多语言环境下的 HTTP Date 解析问题，确保时间校准与时钟偏移 (Clock Skew) 算法在任何 Locale 下均正常工作。
-3. 保持与 edge-tts 命令行参数 100% 兼容。
+1. 完整兼容 Sec-MS-GEC v2 签名：
+   - 在 edge-tts >= 7.3.1 环境下直接使用官方原生 v2 签名支持；
+   - 在旧版环境 (如 7.2.8) 下自动无缝注入 v2 算法与版本头，无需重新构建容器镜像即可即刻恢复。
+2. 双端点高可用热切换 (Failover)：
+   - 首选微软官方主干端点 (speech.platform.bing.com)，承载能力强且杜绝 429 频控；
+   - 备选端点 (api.msedgeservices.com) 自动容灾，遇到 403 或 429 握手异常时秒级平滑回退。
+3. 跨 Locale 安全时间戳解析：
+   - 避免非英语 Locale 下 strptime 解析 HTTP Date 异常导致的时钟漂移校准失败。
 """
 
 import sys
@@ -23,10 +28,8 @@ from edge_tts.drm import DRM
 from edge_tts.util import main
 
 
+# 1. 注入 Locale-Independent 日期安全解析
 def safe_parse_rfc2616_date(date: str):
-    """
-    无视系统 Locale 安全解析 HTTP RFC 2616 时间戳，解决非英文环境下 strptime 报错导致时钟偏移校准失败
-    """
     try:
         parsed = parsedate_to_datetime(date)
     except (TypeError, ValueError, IndexError):
@@ -35,14 +38,31 @@ def safe_parse_rfc2616_date(date: str):
         parsed = parsed.replace(tzinfo=tz.utc)
     return parsed.timestamp()
 
-
-# 注入时间戳安全解析
 DRM.parse_rfc2616_date = safe_parse_rfc2616_date
 
-# 候选 WebSocket 合成端点列表（最新高可用端点优先，旧版端点备用）
+
+# 2. 检查并按需热补丁 Sec-MS-GEC v2 算法 (对 edge-tts < 7.3.1 的无缝向后兼容)
+if not hasattr(edge_tts.drm, "generate_sec_ms_gec_v2"):
+    try:
+        from app.drm_v2 import generate_sec_ms_gec_v2
+    except ImportError:
+        try:
+            from drm_v2 import generate_sec_ms_gec_v2
+        except ImportError:
+            generate_sec_ms_gec_v2 = None
+
+    if generate_sec_ms_gec_v2 is not None:
+        DRM.generate_sec_ms_gec = generate_sec_ms_gec_v2
+        v2_version = f"2-{edge_tts.constants.CHROMIUM_FULL_VERSION}"
+        edge_tts.constants.SEC_MS_GEC_VERSION = v2_version
+        communicate.SEC_MS_GEC_VERSION = v2_version
+
+
+# 3. 候选 WebSocket 端点（主干端点优先，备用端点容灾）
+# 主干端点配合 v2 签名承载量最高且无 429 频控限制
 WSS_URLS = [
-    f"wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key={TRUSTED_CLIENT_TOKEN}",
     LEGACY_WSS_URL,
+    f"wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key={TRUSTED_CLIENT_TOKEN}",
 ]
 
 
@@ -56,14 +76,19 @@ def run():
             return
         except WSServerHandshakeError as e:
             last_err = e
-            if e.status != 403 or i == len(WSS_URLS) - 1:
+            # 当返回 403 (权限拒绝) 或 429 (频率受限) 且存在备选端点时，自动平滑切换
+            if e.status not in (403, 429) or i == len(WSS_URLS) - 1:
                 raise
             host = url.split("?")[0]
-            print(f"[Edge-TTS-Runner] 端点 {host} 返回 403，正在自动切换至备用端点重试...", file=sys.stderr)
+            print(
+                f"[Edge-TTS-Runner] 端点 {host} 返回 HTTP {e.status}，正在自动切换至备用端点重试...",
+                file=sys.stderr
+            )
         except Exception as e:
             last_err = e
             if i == len(WSS_URLS) - 1:
                 raise
+
     if last_err:
         raise last_err
 
