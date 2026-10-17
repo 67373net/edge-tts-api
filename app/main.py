@@ -184,6 +184,60 @@ async def verify_token(
         )
 
 
+# --- 文本清洗与朗读优化预处理 (第 1-8 项规则) ---
+URL_REGEX = re.compile(
+    r"(?:(?:https?|ftp)://|www\.)[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
+    re.IGNORECASE
+)
+EMOJI_REGEX = re.compile(
+    r"[\U00010000-\U0010ffff]|[\u2600-\u27bf]|[\u2300-\u23ff]|[\u2b50-\u2b55]|[\u200d\ufe0f]"
+)
+IMAGE_TAG_REGEX = re.compile(r"\[image:\s[^\s.]+\.[1-9a-zA-Z]{3,4}\]")
+
+
+def clean_text_for_tts(text: str) -> str:
+    """
+    对送入 TTS 朗读的文稿执行 1-8 点智能清洗与朗读优化：
+    1. 彻底清除网址链接 (http://, https://, ftp://, www.)，避免 TTS 读出机械冗长网址；
+    2. 过滤全部 Emoji 图标与特殊表情符，杜绝朗读出表情名称或发音乱码；
+    3. 将独立 67373 替换为汉字大写发音 '六七三七三'，防止读作多位数或英文；
+    4. 清除 Markdown 强调星号 (*)；
+    5. 将正反斜杠 (/ 与 \\) 置换为空格，避免生硬读出标点并提供自然呼吸间歇；
+    6. 将井号标签 (#) 替换为空格；
+    7. 过滤内联图片标记 [image: xxx.ext]；
+    8. 清理多重破折号 (--) 与等号 (==) 等分割线为自然空格，并规整段落空白。
+    """
+    if not text:
+        return ""
+    # 若以 <speak 开头（SSML 高级控制），保留原标签不作破坏性正则清洗
+    if text.strip().startswith("<speak"):
+        return text
+
+    # 1. 清除网址
+    text = URL_REGEX.sub("", text)
+    # 2. 过滤 Emoji
+    text = EMOJI_REGEX.sub("", text)
+    # 3. 将 67373 替换为 '六七三七三' (前后非连续数字)
+    text = re.sub(r"(?<!\d)67373(?!\d)", "六七三七三", text)
+    # 4. 清除 Markdown 星号 (*)
+    text = text.replace("*", "")
+    # 5. 反斜杠与正斜杠替换为空格
+    text = re.sub(r"[\\\/]", " ", text)
+    # 6. 井号 (#) 替换为空格
+    text = text.replace("#", " ")
+    # 7. 过滤内联图片标记 [image: ...]
+    text = IMAGE_TAG_REGEX.sub(" ", text)
+    # 8. 清理长分割线与连字符 (连续 2 个及以上的 - 或 =)
+    text = re.sub(r"-{2,}", " ", text)
+    text = re.sub(r"={2,}", " ", text)
+
+    # 规范化多余水平空格，保留换行段落
+    lines = [re.sub(r"[ \t]{2,}", " ", line).strip() for line in text.splitlines()]
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+
+
 # --- SRT 与时间轴校准工具函数 ---
 def srt_time_to_seconds(time_str: str) -> float:
     """将 SRT 时间戳字符串 (HH:MM:SS,ms) 转换为总秒数"""
@@ -529,11 +583,16 @@ async def create_tts(request: Request, tts_request: TTSRequest):
     mp3_filepath = os.path.join(OUTPUT_DIR, mp3_filename)
     srt_filepath = os.path.join(OUTPUT_DIR, srt_filename)
 
-    # 3. 组装 Edge-TTS 执行命令 (通过增强调度器支持最新微软 WebSocket 端点与防 403 容灾)
+    # 3. 对输入文本执行 1-8 点智能清洗与朗读优化预处理
+    synthesized_text = clean_text_for_tts(tts_request.text)
+    if not synthesized_text:
+        synthesized_text = tts_request.text  # 保底防止清洗后全空报错
+
+    # 4. 组装 Edge-TTS 执行命令 (通过增强调度器支持最新微软 WebSocket 端点与防 403 容灾)
     runner_script = str(Path(__file__).resolve().parent / "edge_tts_runner.py")
     command = [
         sys.executable, runner_script,
-        "--text", tts_request.text,
+        "--text", synthesized_text,
         "--voice", tts_request.voice,
         "--rate", tts_request.rate,
         "--volume", tts_request.volume,
@@ -546,9 +605,9 @@ async def create_tts(request: Request, tts_request: TTSRequest):
     if effective_proxy:
         command.extend(["--proxy", effective_proxy])
 
-    # 4. 进入并发防封队列，带流式活跃守护与动态超时重试执行
+    # 5. 进入并发防封队列，带流式活跃守护与动态超时重试执行
     async with tts_semaphore:
-        await execute_edge_tts_with_retry(command, mp3_filepath, srt_filepath, text=tts_request.text)
+        await execute_edge_tts_with_retry(command, mp3_filepath, srt_filepath, text=synthesized_text)
 
     # 5. 字幕线性重同步（根据 MP3 实际长度拉伸/压缩时间轴）
     srt_content = ""
@@ -574,8 +633,8 @@ async def create_tts(request: Request, tts_request: TTSRequest):
     except Exception as read_err:
         logger.error(f"处理 SRT 文件时出错: {read_err}", exc_info=True)
 
-    # 6. 在原文稿中打上时间戳
-    processed_text = parse_srt_and_add_timestamps(tts_request.text, srt_content)
+    # 6. 在文稿中打上时间戳
+    processed_text = parse_srt_and_add_timestamps(synthesized_text, srt_content)
     base_url = str(request.base_url)
 
     # 7. 返回完全兼容的结果结构

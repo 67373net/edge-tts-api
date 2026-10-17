@@ -1,6 +1,38 @@
 import re
 import unittest
 
+URL_REGEX = re.compile(
+    r"(?:(?:https?|ftp)://|www\.)[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)",
+    re.IGNORECASE
+)
+EMOJI_REGEX = re.compile(
+    r"[\U00010000-\U0010ffff]|[\u2600-\u27bf]|[\u2300-\u23ff]|[\u2b50-\u2b55]|[\u200d\ufe0f]"
+)
+IMAGE_TAG_REGEX = re.compile(r"\[image:\s[^\s.]+\.[1-9a-zA-Z]{3,4}\]")
+
+
+def clean_text_for_tts(text: str) -> str:
+    if not text:
+        return ""
+    if text.strip().startswith("<speak"):
+        return text
+
+    text = URL_REGEX.sub("", text)
+    text = EMOJI_REGEX.sub("", text)
+    text = re.sub(r"(?<!\d)67373(?!\d)", "六七三七三", text)
+    text = text.replace("*", "")
+    text = re.sub(r"[\\\/]", " ", text)
+    text = text.replace("#", " ")
+    text = IMAGE_TAG_REGEX.sub(" ", text)
+    text = re.sub(r"-{2,}", " ", text)
+    text = re.sub(r"={2,}", " ", text)
+
+    lines = [re.sub(r"[ \t]{2,}", " ", line).strip() for line in text.splitlines()]
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+
+
 def srt_time_to_seconds(time_str: str) -> float:
     parts = time_str.split(',')
     h, m, s = map(int, parts[0].split(':'))
@@ -105,6 +137,29 @@ class TestCoreLogic(unittest.TestCase):
         self.assertEqual(parsed.year, 2026)
         self.assertEqual(parsed.month, 10)
         self.assertEqual(parsed.day, 12)
+
+    def test_clean_text_for_tts(self):
+        # 1. 网址清理
+        self.assertEqual(clean_text_for_tts("请访问 https://studio.67373.net/api/v1 谢谢"), "请访问 谢谢")
+        # 2. Emoji 清理
+        self.assertEqual(clean_text_for_tts("祝你开怀大笑 😀🎉 幸福"), "祝你开怀大笑 幸福")
+        # 3. 67373 读作六七三七三 (前后非数字)
+        self.assertEqual(clean_text_for_tts("欢迎使用 67373 服务"), "欢迎使用 六七三七三 服务")
+        self.assertEqual(clean_text_for_tts("67373 置顶"), "六七三七三 置顶")
+        self.assertEqual(clean_text_for_tts("电话13867373888不替换"), "电话13867373888不替换")
+        # 4. Markdown 星号清理
+        self.assertEqual(clean_text_for_tts("**加粗内容** 与 *斜体*"), "加粗内容 与 斜体")
+        # 5. 斜杠替换为空格
+        self.assertEqual(clean_text_for_tts("路径/a/b\\c 测试"), "路径 a b c 测试")
+        # 6. 井号替换为空格
+        self.assertEqual(clean_text_for_tts("#重要通知 #公告 内容"), "重要通知 公告 内容")
+        # 7. 内联图片标记清理
+        self.assertEqual(clean_text_for_tts("图片详情 [image: pic.png] 展示完毕"), "图片详情 展示完毕")
+        # 8. 连续破折号与等号分割线清理
+        self.assertEqual(clean_text_for_tts("标题\n---\n===\n正文"), "标题\n\n正文")
+        # 9. SSML 保留
+        ssml = "<speak><voice name='test'>Hello</voice></speak>"
+        self.assertEqual(clean_text_for_tts(ssml), ssml)
 
 if __name__ == '__main__':
     unittest.main()

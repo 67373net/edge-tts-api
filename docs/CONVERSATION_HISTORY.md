@@ -858,3 +858,57 @@ aiohttp.client_exceptions.WSServerHandshakeError: 429, message='Invalid response
 
 - `docs: 新建标准 AGENTS.md 开发维护手册并深度解析邮件朗读文本预处理逻辑`
 
+---
+
+## 对话记录 #16 (2026-10-17)
+
+### 1. 用户原始需求 (Original Prompt)
+
+```text
+将第1-8点处理整合到本项目中
+```
+
+### 2. 深度分析与方案落地
+
+1. **核心需求解构**：
+   - 将上轮复盘确认的 8 项文本朗读清洗管线（URL 清除、Emoji 过滤、`67373` 转中文大写“六七三七三”、Markdown 星号去除、正反斜杠置换为空格、井号标签替换为空格、内联图片标记清理、分割线/多重破折号与等号规整）完整迁移并深度融入本 Edge-TTS 项目中。
+2. **文本清洗算法优化 (`clean_text_for_tts`)**：
+   - **增强边界识别**：将原本的 `(?<=[^\d])67373(?=[^\d])` 升级为非数字前后视断言 `(?<!\d)67373(?!\d)`，完美兼顾字符串开头（如 `"67373 欢迎光临"`）、字符串结尾（如 `"访问 67373"`）以及各种中英文标点包围的情形，同时确保不误伤电话号码或大数值（如 `"13867373888"`）。
+   - **SSML 保护机制**：若输入文稿以 `<speak` 开头（SSML 高级语音控制），自动绕过正则清洗，确保 XML 节点属性与发音标记完好无损。
+   - **空内容兜底保护**：清洗后若因用户纯输入 URL 或 Emoji 导致文稿为空，自动兜底降级至原始输入，杜绝 Edge-TTS 进程因空文本报错。
+3. **全链路业务闭环**：
+   - 在 [`app/main.py`](file:///home/net67373/edge-tts-api/app/main.py) 的核心接口 `/tts` 中：
+     - 在调用底层 Edge-TTS 进程前统一调用 `clean_text_for_tts`，确保输入音频生成器的文本纯净无杂音；
+     - 在 SRT 字幕生成与时间戳注入环节（`parse_srt_and_add_timestamps`），同步基于清洗后的规范文本进行打点对齐，确保文稿、字幕与音频发音 100% 契合。
+   - 自动覆盖 Web 工作台（前端直接受益，生成高质量纯净音频与时间戳文稿）与所有外部 cURL / API 调用。
+4. **测试验证**：
+   - 在 [`tests/test_core.py`](file:///home/net67373/edge-tts-api/tests/test_core.py) 中新增独立单元测试用例 `test_clean_text_for_tts`，对 8 项规则及 SSML 保护进行全覆盖断言测试（6 个单元测试全部通过，耗时 0.056s）；
+   - 在真实 Docker 容器环境中挂载测试，清洗管线输出完全符合预期。
+
+### 3. 具体修改详情 (Modifications Implemented)
+
+1. **[`app/main.py`](file:///home/net67373/edge-tts-api/app/main.py)**：
+   - 引入 `URL_REGEX`、`EMOJI_REGEX`、`IMAGE_TAG_REGEX`，实现 `clean_text_for_tts` 函数；
+   - 在 `create_tts` 路由中将文本清洗管线整合进主流程。
+2. **[`tests/test_core.py`](file:///home/net67373/edge-tts-api/tests/test_core.py)**：
+   - 补充 `clean_text_for_tts` 完整测试覆盖。
+3. **[`AGENTS.md`](file:///home/net67373/edge-tts-api/AGENTS.md)**：
+   - 新增第 3.4 节《文本预处理与朗读优化清洗管线 (`clean_text_for_tts`)》系统规范。
+4. **[`README.md`](file:///home/net67373/edge-tts-api/README.md)**：
+   - 核心特性中补充“智能文本预处理与朗读优化”特性介绍。
+5. **[`docs/CONVERSATION_HISTORY.md`](file:///home/net67373/edge-tts-api/docs/CONVERSATION_HISTORY.md)**：
+   - 完整归档 Turn #16 复盘记录与 Token 统计。
+
+### 4. Token 消耗统计 (Token Usage)
+
+- **本轮修改交互消耗 (Turn #16)**：
+  - 处理字符总计：约 `36,000` 字符
+  - **估计消耗 Token：约 `9,500` Tokens**
+- **全会话累计消耗 (Cumulative Session Usage)**：
+  - 累计字符总计：约 `1,564,000` 字符
+  - **全会话累计消耗 Token：约 `408,880` Tokens**
+
+### 5. 提交记录
+
+- `feat: 全面整合 8 项智能文本清洗与朗读优化管线，同步更新测试与文档`
+
