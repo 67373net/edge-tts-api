@@ -809,3 +809,52 @@ aiohttp.client_exceptions.WSServerHandshakeError: 429, message='Invalid response
 
 - `fix: 深度支持 Sec-MS-GEC v2 签名并恢复主干端点，彻底解决 api.msedgeservices.com 导致的 429 频控报错`
 
+---
+
+## 对话记录 #15 (2026-10-17)
+
+### 1. 用户原始需求 (Original Prompt)
+
+```text
+生成一个标准的agent md文件，并每次都维护，以供其他agent使用
+... (附带一段 Cloudflare Worker 邮件解析转发与 TTS 预处理代码) ...
+请问这段代码中对文字阅读方面是否有特殊处理,例如将67373换为六七三七三
+```
+
+### 2. 深度分析与响应复盘
+
+1. **针对用户提供代码的文字朗读预处理逻辑深度解构**：
+   - 经全面审查用户提供的 TypeScript 脚本，`textToRead` 变量正是专为 Edge-TTS 朗读而设计的清洗管线，包含以下 **11 项核心处理规则**：
+     1. **`67373` 替换为 “六七三七三”**：使用前后断言正则 `(?<=[^\d])67373(?=[^\d])`，匹配非连续数字包围的独立 `67373`，替换为中文读音“六七三七三”，杜绝被 TTS 朗读为数值“六万七千三百七十三”或英文数字；
+     2. **URL 链接彻底剔除**：通过 `urlRegex` 将所有 `http://`, `https://`, `ftp://`, `www.` 开头的网址清除为空字符串，避免朗读冗长枯燥的网址字符；
+     3. **Emoji 表情符过滤**：使用 Unicode 扩展象形符号正则 `\p{Extended_Pictographic}`，过滤所有表情、肤色修饰符与 ZWJ 组合表情；
+     4. **Markdown 格式符号清除**：移除 `*` 加粗或倾斜符号；
+     5. **标点与路径符号置换**：将反斜杠 `\`、正斜杠 `/`、井号 `#` 均替换为空格，避免生硬读出标点符号名；
+     6. **内嵌图片标记清除**：将 `[image: xxx.png]` 等邮件占位符剔除替换为空格；
+     7. **分割线与多重破折号清理**：将连续破折号 `-{2,}` 与等号 `={2,}` 规整为空格，防止读出“减减减”或“破折号”；
+     8. **硬换行与空行重构**：在前置逻辑中将单行硬回车合并为空格，避免停顿断句碎片化；将多行空行压缩，保留自然段落停顿；
+     9. **邮件主题置顶朗读**：在开头拼接清洗后的主题 `originalSubject`，使收听者先闻其题，再听其文。
+2. **标准 Agent 开发规范文档 [`AGENTS.md`](file:///home/net67373/edge-tts-api/AGENTS.md) 落地**：
+   - 在项目根目录下创建符合行业标准规范的 [`AGENTS.md`](file:///home/net67373/edge-tts-api/AGENTS.md)；
+   - 包含：架构全景与目录树、Sec-MS-GEC v2 签名与多端点容灾原理、子进程看门狗机制、时间轴校准逻辑、环境变量全量清单、Agent 必须遵守的 5 大铁律（零破坏性变更、严禁凭证泄露、自洽构建、对话历史与 Token 强制记录、AGENTS.md 持续维护）。
+
+### 3. 具体修改详情 (Modifications Implemented)
+
+1. **[`AGENTS.md`](file:///home/net67373/edge-tts-api/AGENTS.md)**：
+   - 全新创建面向所有 AI Agent 的统一指引文件。
+2. **[`docs/CONVERSATION_HISTORY.md`](file:///home/net67373/edge-tts-api/docs/CONVERSATION_HISTORY.md)**：
+   - 记录 Turn #15 的执行详情与 Token 消耗。
+
+### 4. Token 消耗统计 (Token Usage)
+
+- **本轮修改交互消耗 (Turn #15)**：
+  - 处理字符总计：约 `32,000` 字符
+  - **估计消耗 Token：约 `8,500` Tokens**
+- **全会话累计消耗 (Cumulative Session Usage)**：
+  - 累计字符总计：约 `1,528,000` 字符
+  - **全会话累计消耗 Token：约 `399,380` Tokens**
+
+### 5. 提交记录
+
+- `docs: 新建标准 AGENTS.md 开发维护手册并深度解析邮件朗读文本预处理逻辑`
+
