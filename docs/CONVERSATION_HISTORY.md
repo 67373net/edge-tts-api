@@ -912,3 +912,36 @@ aiohttp.client_exceptions.WSServerHandshakeError: 429, message='Invalid response
 
 - `feat: 全面整合 8 项智能文本清洗与朗读优化管线，同步更新测试与文档`
 
+---
+
+## 对话记录 #17 (2026-10-17)
+
+### 1. 用户原始需求 (Original Prompt)
+
+```text
+我在其他机器上如何更新部署
+```
+
+### 2. 深度分析与指导方案
+
+1. **环境与配置安全确认**：
+   - 用户在目标机器（如 `/vol1/1000/400G/docker/edgettsapi2/`）维护有自定义的 `.env`（`PORT=13308`, `NAS_SHARE_PATH=...`, `API_TOKEN=...`）以及持久化存储目录 `nasShare/`；
+   - 确认 `.env` 和 `nasShare/` 均在 `.gitignore` 忽略清单中，执行 `git pull` 绝不会覆盖或清空用户私有环境变量与历史音频数据，保证无感平滑升级。
+2. **多场景更新策略设计**：
+   - **推荐首选（重新构建容器镜像）**：
+     执行 `git pull origin main && docker compose up -d --build`。由于 `Dockerfile` 配置了阿里云高速镜像源并锁定了 `edge-tts>=7.3.1`，数十秒内即可完成构建并平滑重启容器，彻底更新容器内基础环境与依赖。
+   - **极速热更新（免重建，秒级生效）**：
+     执行 `git pull origin main && docker compose restart app`。由于 `docker-compose.yml` 双向挂载了 `./app:/usr/src/app`，且项目内置了 `drm_v2.py` 内存热注入补丁，即使不重新 build 容器，重启后也会立即加载最新 Python 逻辑和 8 项文本清洗管线。
+3. **健康检查与运维验证**：
+   - 提供 `docker compose logs -f app` 查看实时启动与鉴权加载日志；
+   - 提供 `curl http://127.0.0.1:<PORT>/health` 健康检查命令。
+
+### 3. Token 消耗统计 (Token Usage)
+
+- **本轮咨询交互消耗 (Turn #17)**：
+  - 处理字符总计：约 `7,000` 字符
+  - **估计消耗 Token：约 `1,800` Tokens**
+- **全会话累计消耗 (Cumulative Session Usage)**：
+  - 累计字符总计：约 `1,571,000` 字符
+  - **全会话累计消耗 Token：约 `410,680` Tokens**
+
